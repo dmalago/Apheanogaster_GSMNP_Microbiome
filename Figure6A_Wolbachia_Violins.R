@@ -9,6 +9,8 @@ library('forcats')
 library('tidyverse')
 library(qiime2R)
 library(ggpubr)
+library(caper)
+library(phylobase)
 setwd("~/Desktop/Final Aphaenogaster Code/Data")
 
 
@@ -54,8 +56,13 @@ simplified_tip_names <- gsub("DM_67_PK7A_PICEA", "PK_7A_PICEA", simplified_tip_n
 simplified_tip_names <- gsub("DM_66_CCB_RUDIS", "CC_1B_RUDIS", simplified_tip_names, ignore.case = FALSE)
 host_tree$tip.label <- simplified_tip_names
 
-purple<-clade.members(x=MRCA(host_tree,'EM_9D_PICEA', 'RC_5B_PICEA'),phy = host_tree,tip.labels=TRUE)
-blue<-clade.members(x=MRCA(host_tree,'BMM_5B_PICEA', 'TC_6A_PICEA'),phy = host_tree,tip.labels=TRUE)
+purple <- clade.members(
+  x = MRCA(host_tree, c('EM_9D_PICEA', 'RC_5B_PICEA')),
+  phy = host_tree,
+  tip.labels = TRUE
+)
+
+blue<-clade.members(x=MRCA(host_tree,c('BMM_5B_PICEA', 'TC_6A_PICEA')),phy = host_tree,tip.labels=TRUE)
 red<-setdiff(host_tree$tip.label,c('A_umphreyi',purple,blue))
 
 
@@ -135,9 +142,25 @@ rMphylo<-M2phylo
 sample_data(rMphylo)$Group<-Group
 rMGphylo<-tax_glom(rMphylo,taxrank = 'Genus')
 
-Wreads<-otu_table(rMGphylo)[which(tax_table(rMGphylo)[,6]=='Wolbachia'),]
+otu <- otu_table(rMGphylo)
+tax <- tax_table(rMGphylo)
 
-diversity_df<-data.frame(sample_data(rMGphylo)$Group,t(Wreads))
+# Identify Wolbachia rows (e.g., Genus or Family level)
+wolbachia_rows <- which(tax[,6] == 'Wolbachia')
+
+# Get the count data for Wolbachia
+wolbachia_counts <- otu[wolbachia_rows, ]
+
+# If there's more than one row for Wolbachia taxa, sum across them
+wolbachia_total <- colSums(as.matrix(wolbachia_counts))
+
+# Total reads per sample
+total_counts <- colSums(as.matrix(otu))
+
+# Relative abundance per sample
+Wreads <- wolbachia_total / total_counts
+
+diversity_df<-data.frame(sample_data(rMGphylo)$Group,(Wreads))
 colnames(diversity_df)<-c('Group','Wolbachia')
 diversity_df$Group<-factor(diversity_df$Group,levels=c('Red','Purple','Blue'))
 
@@ -156,7 +179,7 @@ pshow<-'num'
 ##########################wolbachia Violin Plot#########################################################################################################################################
 
 #Define violin plot
-p_wolbachia <- ggplot(diversity_df, aes(x=Group, y=Wolbachia)) + geom_violin(aes(fill=Group),scale='width') +labs(x ="Group", y = "Wolbachia")
+p_wolbachia <- ggplot(diversity_df, aes(x=Group, y=Wolbachia)) + geom_violin(aes(fill=Group),scale='width') +labs(x ="Group", y = "Wolbachia Relative Abundance")
 #Choose the size of font for the axes titles and labels
 p_wolbachia<-p_wolbachia+theme(axis.title = element_text(size = 20))+theme(axis.text = element_text(size = 13))
 #Choose the size of font for the legend title and lables
@@ -176,8 +199,8 @@ if (kw_wolbachia$p.value<0.01){
   p.adj<-c()
   #locations of the p-value brackets
   ypos<-c()
-  new_y<-23000
-  y_step<-3000
+  new_y<-.95
+  y_step<-.1
   #For each pairwise comparison...
   for (k in 1:length(rownames(pw_wolbachia$p.value))){
     for (j in 1:k){
